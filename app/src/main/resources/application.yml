@@ -12,6 +12,7 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+    open-in-view: false
 
 server:
   port: 8080
