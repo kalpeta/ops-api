@@ -3,6 +3,7 @@ package com.opsapi.customers;
 import com.opsapi.customers.dto.CustomerCreateRequest;
 import com.opsapi.customers.dto.CustomerListResponse;
 import com.opsapi.customers.dto.CustomerResponse;
+import com.opsapi.customers.dto.CustomerUpdateRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -35,7 +36,6 @@ public class CustomerController {
             @RequestParam(defaultValue = "20") int limit,
             @RequestParam(defaultValue = "0") int offset
     ) {
-        // Minimal but real guardrails
         if (limit < 1 || limit > 100) {
             throw new IllegalArgumentException("limit must be between 1 and 100");
         }
@@ -44,5 +44,16 @@ public class CustomerController {
         }
 
         return service.list(limit, offset);
+    }
+
+    @PutMapping("/{id}")
+    public CustomerResponse update(@PathVariable UUID id, @Valid @RequestBody CustomerUpdateRequest req) {
+        return service.update(id, req);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) {
+        service.delete(id);
     }
 }

@@ -3,6 +3,7 @@ package com.opsapi.customers;
 import com.opsapi.customers.dto.CustomerCreateRequest;
 import com.opsapi.customers.dto.CustomerListResponse;
 import com.opsapi.customers.dto.CustomerResponse;
+import com.opsapi.customers.dto.CustomerUpdateRequest;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -47,6 +48,26 @@ public class CustomerService {
                 .toList();
 
         return new CustomerListResponse(limit, offset, items.size(), items);
+    }
+
+    public CustomerResponse update(UUID id, CustomerUpdateRequest req) {
+        CustomerEntity entity = repo.findById(id)
+                .orElseThrow(() -> new CustomerNotFoundException(id));
+
+        // Update fields (normalize like create)
+        entity.setName(req.getName().trim());
+        entity.setEmail(req.getEmail().trim().toLowerCase());
+
+        CustomerEntity saved = repo.save(entity);
+        return toResponse(saved);
+    }
+
+    public void delete(UUID id) {
+        boolean exists = repo.existsById(id);
+        if (!exists) {
+            throw new CustomerNotFoundException(id);
+        }
+        repo.deleteById(id);
     }
 
     private CustomerResponse toResponse(CustomerEntity entity) {

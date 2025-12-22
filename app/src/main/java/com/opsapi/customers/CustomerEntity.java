@@ -64,4 +64,13 @@ public class CustomerEntity {
     public Instant getUpdatedAt() {
         return updatedAt;
     }
+
+    // Setters for updates (controlled mutation)
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
 }
