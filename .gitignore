@@ -1,0 +1,18 @@
+# Maven
+**/target/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# IntelliJ
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Env
+.env

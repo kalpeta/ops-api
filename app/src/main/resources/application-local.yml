@@ -1,0 +1,11 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/opsdb
+    username: ops
+    password: ops
+
+  flyway:
+    enabled: true
+
+  jpa:
+    show-sql: false

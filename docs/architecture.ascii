@@ -1,0 +1,12 @@
+Ops API (Phase 1 - Local Only)
+
+           HTTP (8080)
+curl  --->  Spring Boot
+               |
+               v
+        Controller -> Service -> Repository
+               |
+               v
+        PostgreSQL (Docker, host:5433)
+
+Flyway migrations run on app startup to create/update DB schema.

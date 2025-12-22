@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: ops-api
+
+  # IMPORTANT:
+  # We do NOT let Hibernate auto-create tables.
+  # Flyway migrations own schema creation/history.
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+server:
+  port: 8080
