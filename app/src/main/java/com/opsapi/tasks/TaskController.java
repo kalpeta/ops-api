@@ -3,6 +3,7 @@ package com.opsapi.tasks;
 import com.opsapi.tasks.dto.TaskCreateRequest;
 import com.opsapi.tasks.dto.TaskListResponse;
 import com.opsapi.tasks.dto.TaskResponse;
+import com.opsapi.tasks.dto.TaskStatusUpdateRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -27,5 +28,10 @@ public class TaskController {
     @GetMapping("/customers/{customerId}/tasks")
     public TaskListResponse listTasks(@PathVariable UUID customerId) {
         return service.listTasksForCustomer(customerId);
+    }
+
+    @PatchMapping("/tasks/{taskId}")
+    public TaskResponse updateStatus(@PathVariable UUID taskId, @Valid @RequestBody TaskStatusUpdateRequest req) {
+        return service.updateStatus(taskId, req);
     }
 }

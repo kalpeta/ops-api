@@ -7,6 +7,7 @@ import com.opsapi.notes.NoteRepository;
 import com.opsapi.tasks.dto.TaskCreateRequest;
 import com.opsapi.tasks.dto.TaskListResponse;
 import com.opsapi.tasks.dto.TaskResponse;
+import com.opsapi.tasks.dto.TaskStatusUpdateRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,6 +71,38 @@ public class TaskService {
                 .toList();
 
         return new TaskListResponse(items.size(), items);
+    }
+
+    @Transactional
+    public TaskResponse updateStatus(UUID taskId, TaskStatusUpdateRequest req) {
+        TaskEntity task = taskRepo.findById(taskId)
+                .orElseThrow(() -> new TaskNotFoundException(taskId));
+
+        TaskStatus newStatus;
+        try {
+            newStatus = TaskStatus.valueOf(req.getStatus().trim().toUpperCase());
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid status. Allowed: OPEN, IN_PROGRESS, DONE");
+        }
+
+        task.setStatus(newStatus);
+
+        // saveAndFlush ensures the UPDATE is executed before we build the response,
+        // so updatedAt is deterministic.
+        TaskEntity saved = taskRepo.saveAndFlush(task);
+
+        if (req.isSimulateFailure()) {
+            throw new RuntimeException("Simulated failure after task status update");
+        }
+
+        NoteEntity audit = new NoteEntity(
+                UUID.randomUUID(),
+                taskId,
+                "Status changed to " + newStatus.name()
+        );
+        noteRepo.save(audit);
+
+        return toResponse(saved);
     }
 
     private TaskResponse toResponse(TaskEntity t) {

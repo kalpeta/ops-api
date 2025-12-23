@@ -72,4 +72,8 @@ public class TaskEntity {
     public Instant getUpdatedAt() {
         return updatedAt;
     }
+
+    public void setStatus(TaskStatus status) {
+        this.status = status;
+    }
 }
