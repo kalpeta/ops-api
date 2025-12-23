@@ -5,10 +5,12 @@ import com.opsapi.customers.CustomerRepository;
 import com.opsapi.notes.NoteEntity;
 import com.opsapi.notes.NoteRepository;
 import com.opsapi.tasks.dto.TaskCreateRequest;
+import com.opsapi.tasks.dto.TaskListResponse;
 import com.opsapi.tasks.dto.TaskResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -26,7 +28,6 @@ public class TaskService {
 
     @Transactional
     public TaskResponse createTaskForCustomer(UUID customerId, TaskCreateRequest req) {
-        // Rule: customer must exist
         if (!customerRepo.existsById(customerId)) {
             throw new CustomerNotFoundException(customerId);
         }
@@ -42,7 +43,6 @@ public class TaskService {
 
         TaskEntity savedTask = taskRepo.save(task);
 
-        // TEMP: simulate failure after task insert to prove rollback works
         if (req.isSimulateFailure()) {
             throw new RuntimeException("Simulated failure after task insert");
         }
@@ -55,13 +55,31 @@ public class TaskService {
 
         noteRepo.save(note);
 
+        return toResponse(savedTask);
+    }
+
+    public TaskListResponse listTasksForCustomer(UUID customerId) {
+        if (!customerRepo.existsById(customerId)) {
+            throw new CustomerNotFoundException(customerId);
+        }
+
+        List<TaskEntity> tasks = taskRepo.findByCustomerIdOrderByCreatedAtDesc(customerId);
+
+        List<TaskResponse> items = tasks.stream()
+                .map(this::toResponse)
+                .toList();
+
+        return new TaskListResponse(items.size(), items);
+    }
+
+    private TaskResponse toResponse(TaskEntity t) {
         return new TaskResponse(
-                savedTask.getId(),
-                savedTask.getCustomerId(),
-                savedTask.getTitle(),
-                savedTask.getStatus(),
-                savedTask.getCreatedAt(),
-                savedTask.getUpdatedAt()
+                t.getId(),
+                t.getCustomerId(),
+                t.getTitle(),
+                t.getStatus(),
+                t.getCreatedAt(),
+                t.getUpdatedAt()
         );
     }
 }

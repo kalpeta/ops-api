@@ -1,6 +1,7 @@
 package com.opsapi.tasks;
 
 import com.opsapi.tasks.dto.TaskCreateRequest;
+import com.opsapi.tasks.dto.TaskListResponse;
 import com.opsapi.tasks.dto.TaskResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -21,5 +22,10 @@ public class TaskController {
     @ResponseStatus(HttpStatus.CREATED)
     public TaskResponse createTask(@PathVariable UUID customerId, @Valid @RequestBody TaskCreateRequest req) {
         return service.createTaskForCustomer(customerId, req);
+    }
+
+    @GetMapping("/customers/{customerId}/tasks")
+    public TaskListResponse listTasks(@PathVariable UUID customerId) {
+        return service.listTasksForCustomer(customerId);
     }
 }
