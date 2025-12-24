@@ -8,6 +8,8 @@ import com.opsapi.tasks.dto.TaskCreateRequest;
 import com.opsapi.tasks.dto.TaskListResponse;
 import com.opsapi.tasks.dto.TaskResponse;
 import com.opsapi.tasks.dto.TaskStatusUpdateRequest;
+import com.opsapi.tasks.dto.TaskSummaryResponse;
+import com.opsapi.tasks.dto.TaskSummaryItem;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -73,6 +75,15 @@ public class TaskService {
         return new TaskListResponse(items.size(), items);
     }
 
+    public TaskSummaryResponse listTaskSummaries(UUID customerId) {
+        if (!customerRepo.existsById(customerId)) {
+            throw new CustomerNotFoundException(customerId);
+        }
+
+        List<TaskSummaryItem> items = taskRepo.findTaskSummaries(customerId);
+        return new TaskSummaryResponse(items.size(), items);
+    }
+
     @Transactional
     public TaskResponse updateStatus(UUID taskId, TaskStatusUpdateRequest req) {
         TaskEntity task = taskRepo.findById(taskId)
@@ -86,9 +97,6 @@ public class TaskService {
         }
 
         task.setStatus(newStatus);
-
-        // saveAndFlush ensures the UPDATE is executed before we build the response,
-        // so updatedAt is deterministic.
         TaskEntity saved = taskRepo.saveAndFlush(task);
 
         if (req.isSimulateFailure()) {

@@ -4,6 +4,7 @@ import com.opsapi.tasks.dto.TaskCreateRequest;
 import com.opsapi.tasks.dto.TaskListResponse;
 import com.opsapi.tasks.dto.TaskResponse;
 import com.opsapi.tasks.dto.TaskStatusUpdateRequest;
+import com.opsapi.tasks.dto.TaskSummaryResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +29,11 @@ public class TaskController {
     @GetMapping("/customers/{customerId}/tasks")
     public TaskListResponse listTasks(@PathVariable UUID customerId) {
         return service.listTasksForCustomer(customerId);
+    }
+
+    @GetMapping("/customers/{customerId}/tasks/summary")
+    public TaskSummaryResponse summary(@PathVariable UUID customerId) {
+        return service.listTaskSummaries(customerId);
     }
 
     @PatchMapping("/tasks/{taskId}")
