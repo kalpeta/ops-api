@@ -8,4 +8,10 @@ spring:
     enabled: true
 
   jpa:
-    show-sql: false
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+logging:
+  level:
+    com.opsapi.common: DEBUG
