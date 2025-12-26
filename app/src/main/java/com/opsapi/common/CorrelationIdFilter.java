@@ -39,12 +39,26 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
         // Send it back so callers can log/trace too
         response.setHeader(HEADER_NAME, correlationId);
 
-        // DEBUG: local-only visibility (we will enable DEBUG only in local profile)
-        log.debug("REQ {} {} correlationId={}", request.getMethod(), request.getRequestURI(), correlationId);
+        // Build a readable "path" (include query string only if present)
+        String method = request.getMethod();
+        String uri = request.getRequestURI();
+        String query = request.getQueryString();
+        String path = (query == null || query.isBlank()) ? uri : (uri + "?" + query);
+
+        long startNs = System.nanoTime();
+
+        // 1) REQUEST_START
+        log.info("REQUEST_START {} {}", method, path);
 
         try {
             filterChain.doFilter(request, response);
         } finally {
+            // 2) REQUEST_END (status + latency)
+            int status = response.getStatus();
+            long latencyMs = (System.nanoTime() - startNs) / 1_000_000;
+
+            log.info("REQUEST_END {} {} status={} latency_ms={}", method, path, status, latencyMs);
+
             // IMPORTANT: remove to avoid leaking into other requests/threads
             MDC.remove(MDC_KEY);
         }
