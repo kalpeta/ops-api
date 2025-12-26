@@ -17,6 +17,10 @@ logging:
     com.opsapi.common: DEBUG
 
 management:
+  tracing:
+    sampling:
+      probability: 1.0
+      
   endpoints:
     web:
       exposure:

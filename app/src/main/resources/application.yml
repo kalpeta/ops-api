@@ -4,9 +4,15 @@ spring:
 
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] [%X{correlationId}] %logger{36} : %msg%n"
+    # correlationId = our app-level id (from CorrelationIdFilter)
+    # traceId/spanId = tracing ids (from Micrometer tracing -> MDC)
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] [corr=%X{correlationId}] [trace=%X{traceId}] [span=%X{spanId}] %logger{36} : %msg%n"
 
 management:
+  tracing:
+    sampling:
+      probability: 0.0
+
   endpoints:
     web:
       exposure:
