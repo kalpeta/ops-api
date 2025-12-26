@@ -1,5 +1,6 @@
 package com.opsapi.customers;
 
+import com.opsapi.common.OpsMetrics;
 import com.opsapi.customers.dto.CustomerCreateRequest;
 import com.opsapi.customers.dto.CustomerListResponse;
 import com.opsapi.customers.dto.CustomerResponse;
@@ -14,23 +15,37 @@ public class CustomerService {
 
     private final CustomerRepository repo;
     private final CustomerQueryRepository queryRepo;
+    private final OpsMetrics metrics;
 
-    public CustomerService(CustomerRepository repo, CustomerQueryRepository queryRepo) {
+    public CustomerService(CustomerRepository repo, CustomerQueryRepository queryRepo, OpsMetrics metrics) {
         this.repo = repo;
         this.queryRepo = queryRepo;
+        this.metrics = metrics;
     }
 
+    /**
+     * Phase 2 - Level 1 - Slice 2
+     * Custom Timer around ONE critical flow.
+     * Stable meter name: ops.customers.create
+     *
+     * Mental model:
+     * - We wrap the "real business work" of creating a customer inside a timer.
+     * - Every time this endpoint path triggers create(), the timer records duration.
+     * - Actuator exposes that as COUNT / TOTAL_TIME / MAX under /actuator/metrics/ops.customers.create
+     */
     public CustomerResponse create(CustomerCreateRequest req) {
-        UUID id = UUID.randomUUID();
+        return metrics.time("ops.customers.create", () -> {
+            UUID id = UUID.randomUUID();
 
-        CustomerEntity entity = new CustomerEntity(
-                id,
-                req.getName().trim(),
-                req.getEmail().trim().toLowerCase()
-        );
+            CustomerEntity entity = new CustomerEntity(
+                    id,
+                    req.getName().trim(),
+                    req.getEmail().trim().toLowerCase()
+            );
 
-        CustomerEntity saved = repo.save(entity);
-        return toResponse(saved);
+            CustomerEntity saved = repo.save(entity);
+            return toResponse(saved);
+        });
     }
 
     public CustomerResponse getById(UUID id) {
