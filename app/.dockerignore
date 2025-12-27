@@ -1,0 +1,17 @@
+# Build outputs
+target/
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# OS junk
+.DS_Store
+
+# Git (not needed inside build context)
+.git/
+.gitignore
+
+# Logs
+*.log
