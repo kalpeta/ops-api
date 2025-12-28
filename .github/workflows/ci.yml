@@ -24,3 +24,13 @@ jobs:
       - name: Run tests
         working-directory: app
         run: ./mvnw test
+
+      # Upload surefire reports even if tests fail, so we can inspect failures.
+      - name: Upload test reports (Surefire)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: app/target/surefire-reports/
+          if-no-files-found: warn
+          retention-days: 7
