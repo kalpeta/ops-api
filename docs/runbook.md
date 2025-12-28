@@ -1,6 +1,6 @@
 # Ops API Runbook (Phase 2)
 
-This is the “2am doc” for Ops API.
+This is the “2am doc” for Ops API.  
 Goal: quickly answer **Is it up? Is it slow? Is it failing? Where do I look next?**
 
 ---
@@ -14,11 +14,11 @@ We observe the system using 3 signal types:
 3) **Logs**: “What happened for one request? How long? What status? Which id?”
 
 We already log on every request:
-- REQUEST_START
-- REQUEST_END status=... latency_ms=...
+- `REQUEST_START`
+- `REQUEST_END status=... latency_ms=...`
 …and include:
-- corr (correlation id)
-- trace/span
+- `corr` (correlation id)
+- `trace/span`
 
 So the standard workflow is:
 
@@ -78,11 +78,11 @@ Copy code
 curl -s http://localhost:8080/actuator/metrics/http.server.requests | jq
 How to read it (intuition):
 
-Metrics are counters + timers.
+Metrics are counters + timers
 
-A Timer has COUNT / TOTAL_TIME / MAX (and often percentile histograms if enabled later).
+A Timer has: COUNT / TOTAL_TIME / MAX (and later percentiles if enabled)
 
-We’re using it to find endpoints that are being hit and are slow.
+We use it to find endpoints that are being hit and are slow
 
 Filter by URI (endpoint)
 Most useful query is: “show metrics only for one URI”.
@@ -99,14 +99,12 @@ Copy code
 curl -s "http://localhost:8080/actuator/metrics/http.server.requests?tag=uri:/actuator/health" | jq
 If you’re not sure about the exact uri tag values:
 
-Use logs (REQUEST_START line prints the path)
+Use logs (REQUEST_START prints the path)
 
-Then try the same string in the tag query.
+Then try the same string in the tag query
 
 Check our custom timer (if enabled)
 We added a stable custom meter name:
-
-Example:
 
 bash
 Copy code
@@ -118,8 +116,6 @@ COUNT > 0
 4) Logs: identify error spikes + debug one failure
 What our log lines mean
 Every request produces:
-
-Example:
 
 bash
 Copy code
@@ -134,10 +130,6 @@ status = HTTP status code returned
 latency_ms = time spent in our app for that request
 
 Find “error spikes” (lots of 5xx)
-If you are running in terminal, a quick manual approach is:
-
-watch for status=500 or status=503 in REQUEST_END lines
-
 If you saved logs to a file (optional):
 
 bash
@@ -146,9 +138,7 @@ Copy code
 grep "REQUEST_END" app.log | grep "status=5"
 Debug one failing request using correlation id
 If a user reports: “I got error with X-Correlation-Id=abc...”
-You can search logs for that id.
-
-Example:
+you can search logs for that id.
 
 bash
 Copy code
@@ -191,7 +181,76 @@ Expected:
 
 response contains tasks with latestNoteSnippet populated
 
-6) Common issues (fast fixes)
+6) Release checklist + rollback thinking (Phase 3 — Level 3 / Slice 1)
+Before you “release” (even locally)
+This is the mindset: don’t ship blind.
+
+Pull latest + clean state
+
+bash
+Copy code
+git status
+git pull
+Run tests
+
+bash
+Copy code
+cd app
+./mvnw test
+Run the app once and hit probes
+
+bash
+Copy code
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+Then run Probe 1 + Probe 2 quickly.
+
+If Docker stack is part of the release
+
+bash
+Copy code
+docker compose -f docker/docker-compose.local.yml up -d --build
+curl -s http://localhost:8080/actuator/health | jq
+If something breaks: rollback plan (simple + reliable)
+Mental model:
+
+Your code change is a commit
+
+Rollback = undo that commit (with history preserved) → rebuild → restart
+
+Find the bad commit hash
+
+bash
+Copy code
+git log --oneline --max-count=10
+Revert it (creates a new “undo” commit)
+
+bash
+Copy code
+git revert <BAD_COMMIT_HASH>
+Push the rollback
+
+bash
+Copy code
+git push
+Rebuild + restart locally
+
+bash
+Copy code
+cd app
+./mvnw test
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+Smoke test curls after rollback
+Run these (minimum):
+
+Probe 1 (health)
+
+Probe 2 (create customer)
+
+Probe 3 (get customer)
+
+If these pass, you’re back to a stable baseline.
+
+7) Common issues (fast fixes)
 Port 5433 already in use
 bash
 Copy code
@@ -201,8 +260,6 @@ Fix:
 Stop the process using it OR change compose to another port.
 
 Docker not running
-Fix:
-
 Open Docker Desktop and retry:
 
 bash
@@ -231,6 +288,7 @@ Confirm local profile is used:
 
 bash
 Copy code
+cd app
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 Flyway migration mismatch
 Symptoms:
@@ -243,7 +301,7 @@ Don’t delete random rows from flyway history.
 
 If you changed a migration that already ran, create a NEW migration instead.
 
-7) What to paste when asking for help
+8) What to paste when asking for help
 When something breaks, paste:
 
 The failing curl command + output
@@ -258,5 +316,3 @@ bash
 Copy code
 docker ps
 docker compose -f docker/docker-compose.local.yml logs --tail=100
-yaml
-Copy code
