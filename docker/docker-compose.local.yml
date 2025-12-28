@@ -16,5 +16,22 @@ services:
       timeout: 3s
       retries: 20
 
+  app:
+    build:
+      context: ../app
+      dockerfile: Dockerfile
+    image: ops-api:local
+    container_name: ops-api-app
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/opsdb
+      SPRING_DATASOURCE_USERNAME: ops
+      SPRING_DATASOURCE_PASSWORD: ops
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   ops_api_pgdata:
