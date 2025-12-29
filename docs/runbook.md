@@ -117,7 +117,7 @@ COUNT > 0
 What our log lines mean
 Every request produces:
 
-bash
+text
 Copy code
 [corr=...] [trace=...] [span=...] ... REQUEST_START POST /customers
 [corr=...] [trace=...] [span=...] ... REQUEST_END   POST /customers status=201 latency_ms=115
@@ -185,26 +185,26 @@ response contains tasks with latestNoteSnippet populated
 Before you “release” (even locally)
 This is the mindset: don’t ship blind.
 
-Pull latest + clean state
+Pull latest + clean state:
 
 bash
 Copy code
 git status
 git pull
-Run tests
+Run tests:
 
 bash
 Copy code
 cd app
 ./mvnw test
-Run the app once and hit probes
+Run the app once and hit probes:
 
 bash
 Copy code
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 Then run Probe 1 + Probe 2 quickly.
 
-If Docker stack is part of the release
+If Docker stack is part of the release:
 
 bash
 Copy code
@@ -217,30 +217,29 @@ Your code change is a commit
 
 Rollback = undo that commit (with history preserved) → rebuild → restart
 
-Find the bad commit hash
+Find the bad commit hash:
 
 bash
 Copy code
 git log --oneline --max-count=10
-Revert it (creates a new “undo” commit)
+Revert it (creates a new “undo” commit):
 
 bash
 Copy code
 git revert <BAD_COMMIT_HASH>
-Push the rollback
+Push the rollback:
 
 bash
 Copy code
 git push
-Rebuild + restart locally
+Rebuild + restart locally:
 
 bash
 Copy code
 cd app
 ./mvnw test
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
-Smoke test curls after rollback
-Run these (minimum):
+Smoke test curls after rollback (minimum):
 
 Probe 1 (health)
 
@@ -316,3 +315,188 @@ bash
 Copy code
 docker ps
 docker compose -f docker/docker-compose.local.yml logs --tail=100
+9) Failure drill: “Dependency down” (Level 4 — Slice 1)
+This drill is specifically for when the upstream dependency stub behaves badly (fail / slow / timeout / bulkhead reject / circuit open).
+
+A) Symptoms (what you’ll see)
+Symptom 1 — Customer dependency-check returns 5xx
+Example call:
+
+bash
+Copy code
+curl -i -s "http://localhost:8080/customers/<CUSTOMER_ID>/dependency-check?mode=fail"
+Possible results:
+
+503 with stub body (upstream failure propagated)
+
+504 (timeout after retries)
+
+503 with error=CIRCUIT_OPEN (circuit breaker open, fail-fast)
+
+429 with error=BULKHEAD_FULL (too many concurrent outbound calls)
+
+Symptom 2 — Requests are “slow”
+Example call:
+
+bash
+Copy code
+curl -i -s "http://localhost:8080/customers/<CUSTOMER_ID>/dependency-check?mode=slow&delayMs=2000"
+You’ll see:
+
+request latency ~ delayMs
+
+logs show outbound latency and which attempt succeeded/failed
+
+Symptom 3 — Health still UP (important!)
+Even if dependency calls fail, /actuator/health may still be UP.
+That means “service is alive” — not “all dependencies are healthy”.
+
+B) Where to look (fast triage order)
+1) Confirm the app is up
+bash
+Copy code
+curl -s http://localhost:8080/actuator/health | jq
+If it’s not reachable → app is down, stop this drill and fix startup/runtime first.
+
+2) Confirm the dependency stub endpoint itself
+Directly call the stub:
+
+bash
+Copy code
+curl -i -s "http://localhost:8080/_stub/dependency?mode=ok"
+curl -i -s "http://localhost:8080/_stub/dependency?mode=fail"
+curl -i -s "http://localhost:8080/_stub/dependency?mode=slow&delayMs=2000"
+If these don’t behave as expected → the stub controller itself is broken.
+
+3) Check logs (single request)
+Run one failing call and immediately inspect logs for the SAME correlation id:
+
+REQUEST_START ... /customers/.../dependency-check
+
+OUTBOUND_ATTEMPT ...
+
+OUTBOUND_END ... status=... latency_ms=...
+
+REQUEST_END ... status=... latency_ms=...
+
+Quick filters (if logging to a file):
+
+bash
+Copy code
+grep "dependency-check" app.log | tail -n 50
+grep "OUTBOUND_" app.log | tail -n 50
+grep "CB_" app.log | tail -n 50
+grep "BULKHEAD_" app.log | tail -n 50
+What each implies:
+
+OUTBOUND_END ... status=503 → upstream returned 503 (mode=fail)
+
+OUTBOUND_END ... status=TIMEOUT_OR_IO → timeout / IO issue
+
+CB_OPEN_FAILFAST or CB_TRANSITION ... OPEN → circuit breaker is open
+
+BULKHEAD_FULL / BULKHEAD_REJECT → concurrency limit reached
+
+4) Check metrics for “is it slow/failing?”
+bash
+Copy code
+curl -s http://localhost:8080/actuator/metrics/http.server.requests | jq
+If you want just this endpoint:
+
+bash
+Copy code
+curl -s "http://localhost:8080/actuator/metrics/http.server.requests?tag=uri:/customers/{id}/dependency-check" | jq
+Note: exact uri tag formatting can vary; if it doesn’t match, use logs to infer the uri tag value.
+
+C) Mitigation steps (what to do right now)
+Pick the branch that matches your symptom.
+
+Case 1 — Upstream is failing (503) but app is healthy
+Action:
+
+Confirm the stub returns fail only when mode=fail
+
+Switch to mode=ok to confirm the path works
+
+If the circuit opened from repeated failures: stop sending fail traffic and wait for it to half-open automatically.
+
+Confirm:
+
+bash
+Copy code
+curl -i -s "http://localhost:8080/customers/<CUSTOMER_ID>/dependency-check?mode=ok"
+Case 2 — Upstream is slow and causing timeouts (504)
+Action:
+
+Reduce delayMs to confirm behavior scales with delay
+
+If timeouts happen: treat as a dependency performance issue.
+
+Immediate mitigation is “degrade”: return stable error quickly (timeout / circuit open) instead of hanging.
+
+Confirm:
+
+bash
+Copy code
+curl -i -s "http://localhost:8080/customers/<CUSTOMER_ID>/dependency-check?mode=slow&delayMs=200"
+curl -i -s "http://localhost:8080/customers/<CUSTOMER_ID>/dependency-check?mode=slow&delayMs=2000"
+Case 3 — Bulkhead rejections (429 BULKHEAD_FULL)
+Action:
+
+You have too many concurrent dependency calls.
+
+Reduce concurrency from caller side OR increase bulkhead capacity (config change) later.
+
+Immediate mitigation: retry later (caller backoff), because bulkhead rejection is a load-shedding signal.
+
+Confirm load-shedding:
+
+fire multiple concurrent requests (e.g., from two terminals quickly or a small loop)
+
+expect some 429 while others succeed
+
+Case 4 — Circuit breaker open (503 CIRCUIT_OPEN)
+Action:
+
+Stop sending failing traffic (mode=fail) and wait waitDurationInOpenState (configured).
+
+Then send a couple of mode=ok requests to allow recovery.
+
+Confirm recovery:
+
+bash
+Copy code
+# 1) while open, you should see CIRCUIT_OPEN
+curl -i -s "http://localhost:8080/customers/<CUSTOMER_ID>/dependency-check?mode=ok"
+
+# 2) after waiting, try again (expect success if dependency is healthy)
+curl -i -s "http://localhost:8080/customers/<CUSTOMER_ID>/dependency-check?mode=ok"
+D) Confirmation checks (prove it’s stable again)
+Minimum confirmation sequence:
+
+Health is UP
+
+bash
+Copy code
+curl -s http://localhost:8080/actuator/health | jq
+Dependency stub direct is OK
+
+bash
+Copy code
+curl -i -s "http://localhost:8080/_stub/dependency?mode=ok"
+Customer dependency-check OK
+
+bash
+Copy code
+curl -i -s "http://localhost:8080/customers/<CUSTOMER_ID>/dependency-check?mode=ok"
+Logs show clean flow:
+
+REQUEST_END ... status=200
+
+OUTBOUND_END ... status=200
+
+no CB_OPEN_FAILFAST
+
+no BULKHEAD_FULL
+
+Optional: re-run a slow call and confirm latency matches expectation (no surprise timeouts).

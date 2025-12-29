@@ -4,8 +4,10 @@ import com.opsapi.customers.dto.CustomerCreateRequest;
 import com.opsapi.customers.dto.CustomerListResponse;
 import com.opsapi.customers.dto.CustomerResponse;
 import com.opsapi.customers.dto.CustomerUpdateRequest;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -15,9 +17,11 @@ import java.util.UUID;
 public class CustomerController {
 
     private final CustomerService service;
+    private final CustomerDependencyService dependencyService;
 
-    public CustomerController(CustomerService service) {
+    public CustomerController(CustomerService service, CustomerDependencyService dependencyService) {
         this.service = service;
+        this.dependencyService = dependencyService;
     }
 
     @PostMapping
@@ -55,5 +59,15 @@ public class CustomerController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {
         service.delete(id);
+    }
+
+    @GetMapping("/{id}/dependency-check")
+    public ResponseEntity<Object> dependencyCheck(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "ok") String mode,
+            @RequestParam(required = false) Integer delayMs,
+            HttpServletRequest request
+    ) {
+        return dependencyService.checkDependency(id, mode, delayMs, request);
     }
 }

@@ -20,8 +20,39 @@ management:
   tracing:
     sampling:
       probability: 1.0
-      
+
   endpoints:
     web:
       exposure:
         include: health,metrics
+
+# Local default (only used if we cannot infer base url from the incoming request)
+ops:
+  dependency:
+    base-url: "http://localhost:8080"
+    timeout-ms: 800
+    retry:
+      max-attempts: 3
+      backoff-ms: 100
+
+# Circuit Breaker + Bulkhead config
+resilience4j:
+  circuitbreaker:
+    instances:
+      dependencyStub:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 5
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        permittedNumberOfCallsInHalfOpenState: 2
+
+  bulkhead:
+    instances:
+      dependencyStub:
+        # Only allow N concurrent outbound calls at once
+        maxConcurrentCalls: 2
+
+        # If saturated, wait briefly for a slot; if still not available -> reject
+        maxWaitDuration: 100ms
