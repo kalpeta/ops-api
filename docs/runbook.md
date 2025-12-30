@@ -500,3 +500,205 @@ no CB_OPEN_FAILFAST
 no BULKHEAD_FULL
 
 Optional: re-run a slow call and confirm latency matches expectation (no surprise timeouts).
+
+Phase 5 — Kafka + Outbox + Idempotency
+What “success” looks like in logs
+
+When you create a customer, you should see both:
+
+Outbox write (same transaction as customer creation)
+
+OUTBOX_ENQUEUED ...
+
+Poller publish
+
+OUTBOX_SENT ...
+
+Consumer receive/process
+
+EVENT_CONSUMED ...
+
+EVENT_PROCESSED ...
+
+(and if duplicate): EVENT_DUPLICATE_IGNORED ...
+
+To watch it live:
+
+docker compose -f docker/docker-compose.local.yml logs -f app
+
+Kafka drills
+Drill A — Kafka down should NOT lose events (Outbox reliability)
+
+Goal: prove “customer created while Kafka is down” still eventually produces an event.
+
+Stop Kafka:
+
+docker compose -f docker/docker-compose.local.yml stop kafka
+
+
+Create a customer:
+
+curl -i -X POST "http://localhost:8080/customers" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Kafka Down User","email":"kafkadown@example.com"}'
+
+
+Expected:
+
+Request should still succeed (customer saved).
+
+App logs should show:
+
+OUTBOX_ENQUEUED ...
+
+OUTBOX_SEND_FAILED ... (poller cannot publish)
+
+Start Kafka back:
+
+docker compose -f docker/docker-compose.local.yml start kafka
+
+
+Expected:
+
+App logs soon show:
+
+OUTBOX_SENT ...
+
+EVENT_CONSUMED ... / EVENT_PROCESSED ...
+
+Drill B — Duplicate events can happen; consumer must stay correct (Idempotency/dedupe)
+
+Reality: duplicates can happen due to retries, producer uncertainty, consumer rebalances, etc.
+
+Expected log when duplicates happen:
+
+EVENT_DUPLICATE_IGNORED eventId=...
+
+How to “force” the idea:
+
+Re-run the app quickly / restart consumer / simulate re-delivery (depends on your setup).
+
+The important invariant: same eventId must not be processed twice.
+
+Event versioning mindset (compatibility rules)
+
+Every event should carry a schema version (e.g., schemaVersion: 1).
+
+Rules of thumb:
+
+Consumer must accept older versions (don’t break old producers).
+
+Adding a field is safe if it’s optional for consumers.
+
+Removing/renaming a field is breaking unless you support both old+new fields for a period.
+
+Expected behavior:
+
+Consumer can handle v1 and v2 payloads where v2 adds an optional field.
+
+Logs should still show EVENT_PROCESSED ... for both versions.
+
+Trace & debug async (follow a workflow across HTTP → Kafka)
+How to follow one request end-to-end
+
+Send a request with your own correlation id:
+
+curl -i -X POST "http://localhost:8080/customers" \
+  -H "Content-Type: application/json" \
+  -H "X-Correlation-Id: flow-001" \
+  -d '{"name":"Trace Me","email":"trace@example.com"}'
+
+
+In logs, search for corr=flow-001:
+
+docker compose -f docker/docker-compose.local.yml logs app | grep "corr=flow-001"
+
+
+You should be able to see:
+
+REQUEST_START ...
+
+OUTBOX_ENQUEUED ... corr=flow-001
+
+OUTBOX_SENT ... corr=flow-001
+
+EVENT_CONSUMED ... corr=flow-001 (or correlation id inside payload/headers)
+
+EVENT_PROCESSED ... corr=flow-001
+
+If you prefer to follow by eventId, grab it from the event JSON and grep it too.
+
+Tests
+
+Run tests:
+
+cd app
+./mvnw test
+
+
+Note: Kafka-driven behavior is primarily validated via docker compose + logs in Phase 5.
+
+DB quick checks (optional)
+
+Customers:
+
+docker exec -it ops-api-postgres psql -U ops -d opsdb \
+  -c "select id, name, email, created_at, updated_at from customers order by created_at desc;"
+
+
+Outbox queue (example columns may differ):
+
+docker exec -it ops-api-postgres psql -U ops -d opsdb \
+  -c "select id, aggregate_type, aggregate_id, event_type, status, attempts, created_at, sent_at from outbox_events order by created_at desc limit 20;"
+
+
+Processed events (dedupe table):
+
+docker exec -it ops-api-postgres psql -U ops -d opsdb \
+  -c "select event_id, event_type, correlation_id, processed_at from processed_events order by processed_at desc limit 20;"
+
+Common issues (fast fixes)
+“Kafka works on my laptop but app container can’t connect”
+
+Inside Docker, localhost means “the container itself”, not your machine.
+
+Fix:
+
+In compose, app should use:
+
+SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+
+For host access, use:
+
+localhost:29092
+
+“I don’t see EVENT logs”
+
+Make sure you’re tailing the app container:
+
+docker compose -f docker/docker-compose.local.yml logs -f app
+
+
+Also ensure Kafka is healthy:
+
+docker compose -f docker/docker-compose.local.yml ps
+
+What to paste when asking for help
+
+The curl command + response
+
+The matching log chain:
+
+REQUEST_START + REQUEST_END
+
+OUTBOX_ENQUEUED
+
+OUTBOX_SENT or OUTBOX_SEND_FAILED
+
+EVENT_CONSUMED / EVENT_PROCESSED
+
+Output of:
+
+docker compose -f docker/docker-compose.local.yml ps
+docker compose -f docker/docker-compose.local.yml logs --tail=200 app
+docker compose -f docker/docker-compose.local.yml logs --tail=200 kafka
