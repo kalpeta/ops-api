@@ -6,6 +6,8 @@ import com.opsapi.customers.dto.CustomerListResponse;
 import com.opsapi.customers.dto.CustomerResponse;
 import com.opsapi.customers.dto.CustomerUpdateRequest;
 import org.springframework.stereotype.Service;
+import com.opsapi.events.CustomerEventPublisher;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -16,11 +18,13 @@ public class CustomerService {
     private final CustomerRepository repo;
     private final CustomerQueryRepository queryRepo;
     private final OpsMetrics metrics;
+    private final CustomerEventPublisher eventPublisher;
 
-    public CustomerService(CustomerRepository repo, CustomerQueryRepository queryRepo, OpsMetrics metrics) {
+    public CustomerService(CustomerRepository repo, CustomerQueryRepository queryRepo, OpsMetrics metrics, CustomerEventPublisher eventPublisher) {
         this.repo = repo;
         this.queryRepo = queryRepo;
         this.metrics = metrics;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -33,6 +37,7 @@ public class CustomerService {
      * - Every time this endpoint path triggers create(), the timer records duration.
      * - Actuator exposes that as COUNT / TOTAL_TIME / MAX under /actuator/metrics/ops.customers.create
      */
+    @Transactional
     public CustomerResponse create(CustomerCreateRequest req) {
         return metrics.time("ops.customers.create", () -> {
             UUID id = UUID.randomUUID();
@@ -44,6 +49,7 @@ public class CustomerService {
             );
 
             CustomerEntity saved = repo.save(entity);
+            eventPublisher.publishCustomerCreated(saved);
             return toResponse(saved);
         });
     }
